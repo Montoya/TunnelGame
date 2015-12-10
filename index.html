@@ -1,0 +1,578 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+
+<html lang="en">
+
+<head>
+
+  <title>Tunnel: a Javascript &amp; CSS game by Christian Montoya (now with private data!)</title>
+  <script type="text/javascript" src="jquery.js"></script>
+  
+  <style type="text/css" media="screen">
+    body {
+      background:#000;
+      color:#fafafa;
+      font-family:Consolas, "Bitstream Vera Sans Mono", monospace;
+      font-size:16px;
+      height:100%;
+      margin:0;
+      padding:0;
+      width:100%;
+    }
+    a { 
+    	color:#fff; 
+    }
+    fieldset {
+      border:none;
+    }
+    ul {
+      margin:10px 0;
+      padding:0;
+    }
+    li {
+      margin:0;
+      padding:0;
+    }
+    table {
+      margin:8px auto;
+    }
+    caption {
+      margin:0 auto;
+    }
+    th, td {
+      padding:2px 4px;
+    }
+    th {
+      text-align:right;
+    }
+    td {
+      text-align:left;
+    }
+    #tunnel {
+      background:#000 url(pixel-pattern.png) 50% 0;
+      border:1px solid #fafafa;
+      cursor:crosshair;
+      height:500px;
+      margin:40px auto 20px;
+      position:relative;
+      width:500px;
+    }
+    #info { 
+      margin:0 auto 20px;
+      width:500px;
+      text-align:right;
+    }
+    #info_score {
+      float:left;
+    }
+    #ship {
+      position:absolute;
+      top:450px;
+      left:234px;
+    }
+    .left_wall {
+      display:none;
+      position:absolute;
+      top:0;
+      left:80px;
+    }
+    .right_wall {
+      display:none;
+      position:absolute;
+      top:0;
+      left:400px;
+    }
+    .display, .message {
+      background:#222;
+      color:#fafafa;
+      cursor:pointer;cursor:hand;
+      display:none;
+      font-weight:bold;
+      text-align:center;
+      text-transform:uppercase;
+      width:100%;
+      z-index:3;
+    }
+    .display {
+      line-height:1.4;
+      padding:14px 0;
+      margin-top:28px;
+    }
+    .message {
+      line-height:2.0;
+      position:absolute;
+      top:50%;
+      margin-top:-16px;   
+    }
+    #welcome {
+      z-index:4;
+    }
+    #game_over {
+      padding-top:14px;
+      z-index:5;
+    }
+    #score_table {
+      z-index:4;
+    }
+    #high_score {
+      cursor:default;
+    }
+  </style>
+  
+  <script type="text/javascript">
+  
+    /* secure object for holding private game variables */
+    function secureGame() {
+      
+      var that = this;
+      
+      var alive = true; /* player alive or dead */
+      
+      function playerKill() {
+        alive = false; return true;
+      }
+      
+      function lifeCheck() {
+        return alive;
+      }
+      
+      this.killPlayer = function () {
+        playerKill(); return true;
+      }
+      
+      this.checkLife = function () {
+        return lifeCheck();
+      }
+      
+      var score = 0; /* total score */
+      
+      function scoreGet() {
+        return score;
+      }
+      
+      function scoreInc() {
+        if(alive) { score++; } return true;
+      }
+      
+      this.getScore = function() {
+        return scoreGet();
+      }
+      
+      this.incScore = function() {
+        scoreInc(); return true;
+      }
+      
+      var tunnel_width = 320;
+      
+      function tunnelShrink() {
+        tunnel_width-=20; return true;
+      }
+      
+      function tunnelWidth() {
+        return tunnel_width;
+      }
+      
+      this.shrinkTunnel = function() {
+        tunnelShrink(); return true;
+      }
+      
+      this.widthTunnel = function() {
+        return tunnelWidth();
+      }
+      
+    }
+    
+    /* alive = 1; // game state */
+    
+    var bg_val = 0; // background scroll position
+    
+    var rail_left = 0; // left edge of game container
+    
+    var rail_right = 500; // right edge of game container
+    
+    var ship_x = 234; // starting position of ship
+    
+    var pos_x = 234; // starting position of center of movement
+    
+    var c_s = 0; // counter for score update
+    
+    var c_r = 0; // counter for random tunnel update
+    
+    var c_w = 0; // counter for wall width update
+    
+    /* score = 0; // total score */
+    
+    var t_state = 0; // tunnel movement, 0 = left, 1 = right
+    
+    left_wall = new Array(20);
+    
+    right_wall = new Array(20);
+    
+    /* tunnel_width = 320; // width between walls */
+    
+    // initiate variables, arrays
+    function initTunnel() {
+    
+      tunnelGame = new secureGame();
+      
+      if('object' == typeof console) {
+        console.warn("No cheating!");
+      }
+      
+      rail_left = document.getElementById('tunnel').offsetLeft;
+      
+      rail_right += rail_left;
+      
+      y = 0;
+      for(y=0;y<20;y++) {
+        left_wall[y]=80;
+        right_wall[y]=400;
+      }
+      
+      $('img.left_wall').each(function(i){
+        y = i*25;
+        $(this).css('top',''+y+'px');
+        $(this).css('display','block');
+      });
+      
+      $("img.right_wall").each(function(i){
+        y = i*25;
+        $(this).css('top',''+y+'px');
+        $(this).css('display','block');
+      });
+      
+      $('div#score_table').click(function(){
+      
+        $('table').remove('#high_scores');
+        
+        $('div#score_table').css('display','none');
+        
+        restartTunnel();
+        
+        updateTunnel();
+        
+      });      
+      
+    }
+    
+    function restartTunnel() {
+    
+      tunnelGame = new secureGame();
+      
+      if('object' == typeof console) {
+        console.warn("No cheating!");
+      }
+      
+      ship_x = 234;
+      
+      c_s = 0;
+      
+      c_r = 0;
+      
+      c_w = 0;
+      
+      $('span#score').text(''+0);
+      
+      $('img#ship').css('left',ship_x+'px');
+      
+      y = 0;
+      for(y=0;y<20;y++) {
+        left_wall[y]=80;
+        right_wall[y]=400;
+      }
+      
+      $('img#ship').fadeIn('slow');
+      
+      $('img.left_wall').each(function(i){
+        y = i*25;
+        $(this).css('top',''+y+'px');
+        $(this).css('display','block');
+      });
+      
+      $("img.right_wall").each(function(i){
+        y = i*25;
+        $(this).css('top',''+y+'px');
+        $(this).css('display','block');
+      });
+      
+    }
+    
+    // main game logic
+    function updateTunnel() {
+      
+      /* scrolling background */
+      bg_val=bg_val+2;
+      
+      if(bg_val>20) bg_val = 0;
+      
+      $('div#tunnel').css('background-position','50% '+bg_val+'px');
+      
+      /* moving ship according to mouse */
+      if(ship_x+32<500) {
+        if(ship_x+46<pos_x) ship_x+=4;
+        else if(ship_x+16<pos_x) ship_x+=2;
+      }
+      if(ship_x>0) {
+        if(ship_x-14>pos_x) ship_x-=4;
+        else if(ship_x+16>pos_x) ship_x-=2;
+      }
+      
+      $('img#ship').css('left',ship_x+'px');
+      
+      /* random movement of tunnel*/
+      c_r++;
+      
+      if(c_r>60) {
+        c_r = 0;
+        t_state = Math.floor(Math.random()*2); 
+      }
+      
+      if(left_wall[0]<10) {
+        // hitting left edge, must move right
+        t_state = 1;
+      }
+      else if(right_wall[0]>470) {
+        // hitting right edge, must move left
+        t_state = 0;
+      }
+      
+      y = 0;
+      for(y=20;y>0;y--) {
+        left_wall[y] = left_wall[y-1];
+        right_wall[y] = right_wall[y-1];
+      }      
+      
+      if(t_state==0) {
+        left_wall[0]-=3;
+      }
+      if(t_state==1) {
+        left_wall[0]+=3;
+      }
+      
+      right_wall[0] = left_wall[0] + tunnelGame.widthTunnel(); /* tunnel_width; */
+      
+      $('img.left_wall').each(function(i){
+        $(this).css('left',''+left_wall[i]+'px');
+      });
+      
+      $("img.right_wall").each(function(i){
+        $(this).css('left',''+right_wall[i]+'px');
+      });      
+      
+      /* shrink tunnel width */
+      if(tunnelGame.widthTunnel() >= 120) { /*tunnel_width*/
+        c_w++;
+        if(c_w>100) {
+          c_w = 0;
+          tunnelGame.shrinkTunnel();
+          /*tunnel_width-=20;*/
+          left_wall[0]+=10;
+        }
+      }
+      
+      /* incrementing score */
+      c_s++;
+      
+      if(c_s>20) {
+        c_s = 0;
+        tunnelGame.incScore();
+        /*score = $('span#score').text();
+        score++;*/
+        $('span#score').text(''+tunnelGame.getScore()); /* score */
+      }
+      
+      /* checking collision */
+      if(ship_x<=left_wall[18]+20 || ship_x+32>=right_wall[18]) {
+        /* alive = 0; */
+        tunnelGame.killPlayer();
+      }
+      
+      /* running game logic repeatedly */
+      if(tunnelGame.checkLife()) { /* alive == 1 */
+        setTimeout('updateTunnel()',10);
+      }
+      else {
+      
+        /* $('input#player_score').val($('span#score').text()); */
+        
+        $('img#ship').fadeOut('slow');
+        
+        $('img.left_wall').css('display','none');
+        
+        $('img.right_wall').css('display','none');        
+        
+        $.ajax({
+          type: "POST",
+          url: "high-scores.php",
+          data: "score="+tunnelGame.getScore(),/*$('input#player_score').val(),*/
+          success: function(msg){
+            if('1'==msg) scoreUpdate();
+            else showHighScores();
+          }
+        });
+        
+      }
+      
+    }
+    
+    function scoreUpdate() {
+    
+      $('form#high_score').submit(function(){
+        
+        var player_name = $('input#player_name').val();
+        
+        var xyz = $('input#ts').val();
+        
+        if(player_name.length>0) {
+          
+          $(this).css('display','none');
+          
+          $.ajax({
+            type: "POST",
+            url: "high-scores.php",
+            data: "name="+player_name+"&highscore="+tunnelGame.getScore()+"&ts="+xyz,/*$('input#player_score').val()*/
+            success: function(msg){
+              if('0'==msg) alert('File write error!');
+              else if('2'==msg) alert('Exclusive write failure!');
+              $('input#player_name').val('');
+              /*$('input#player_score').val('0');*/
+              $('span#score').text('0');
+              $('table').remove('#high_scores');
+              showHighScores();              
+            }
+          });
+          
+        }
+        else {
+          alert("Please enter a name!");
+        }
+        
+        return false;
+        
+      });
+      
+      $('form#high_score').css('display','block');
+      
+    }
+    
+    /* issue ajax request to get html for high score table */
+    function showHighScores() {
+    
+      var html = $.ajax({
+        url: "high-scores.php",
+        async: false
+      }).responseText;
+       
+      $('div#score_table').prepend(html);
+      
+      $('div#score_table').css('display','block');    
+    
+    }
+    
+    $(document).ready(function(){
+      
+      // secure token for submitting data
+      $.get('token.php',function(txt){
+        $('fieldset#high_score_field').append('<input type="hidden" id="ts" name="ts" value="'+txt+'">');
+      });
+      
+      // show start message
+      $('p#welcome').css('display','block');
+      
+      $('p#welcome').click(function(){
+        
+        $('p#welcome').css('display','none');
+        initTunnel();
+        updateTunnel();
+        
+      });     
+      
+    });
+    
+    /* checks movement relative to game container */
+    $(document).mousemove(function(e){ pos_x = e.pageX - rail_left; });
+    
+  </script>
+
+</head>
+
+<body>
+
+  <div id="tunnel">
+  
+    <img id="ship" width="32" height="32" alt="A" src="ship.gif">
+    
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="left_wall" width="20" height="25" alt="|" src="wall.gif">
+    
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    <img class="right_wall" width="20" height="25" alt="|" src="wall.gif">
+    
+    <p id="welcome" class="message">Click to start.</p>
+    
+    <form id="high_score" class="message">
+    
+      <fieldset id="high_score_field">
+      
+        <label for="player_name">You got a high score! Enter your name:</label><br>
+        <input type="text" id="player_name" name="player_name" maxlength="40">&nbsp;
+        <input type="submit" value="Enter">
+        
+      </fieldset>
+      
+    </form>
+    
+    <div id='score_table' class='display'>
+    
+      <p id='game_over'>Game over. Click to restart.</p>
+    
+    </div>
+    
+  </div>
+  
+  <div id="info">
+  
+    <div id="info_score">Score: <span id="score">0</span></div>
+    
+    By <a href="http://christianmontoya.net">Christian Montoya</a>
+    
+  </div>
+
+</body>
+
+</html>
